@@ -15,7 +15,9 @@ console.log(`ENVIRONMENT: ${process.env.PRODUCTION}`);
 console.log(`DOCKER: ${process.env.DOCKER}`);
 
 const MONGO_CONNECTION = `mongodb://${process.env.MONGO_USER}:${process.env.MONGO_PASS}@${process.env.MONGO_HOST}:${process.env.MONGO_PORT}/${process.env.MONGO_DB}?authSource=${process.env.MONGO_AUTHDB}`
+
 console.log(MONGO_CONNECTION)
+// mongodb://program_pmi_app:pR0gR8m_pM1_tz@mongo:27017/?authMechanism=DEFAULT
 mongoose.connect(MONGO_CONNECTION)
     .then(() => console.log('MongoDB connected'))
     .catch(err => console.log(err))

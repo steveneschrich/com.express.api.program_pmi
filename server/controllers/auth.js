@@ -5,7 +5,7 @@ const AuthService = require('../services/AuthService')
 
 module.exports.auth = (req, res) => {
 
-console.log(req.body)
+    console.log(req.body)
 
     const dn = 'dc=phsu-mcc,dc=moffitt,dc=org'
     const context = `ou=users,${dn}`
@@ -27,6 +27,8 @@ console.log(req.body)
         reconnect: true
     })
 
+    console.log('ldap clinet',client)
+
     client.on('error', err => {
         console.log('connection error')
         console.log(err)
@@ -46,16 +48,15 @@ console.log(req.body)
         attributes: ['dn', 'uid', 'cn', 'mail']
     }
 
-    client.bind(`cn=${uid},${context}`, password, (bindErr,bindRes) => {
+    client.bind(`uid=${uid},${context}`, password, (bindErr, bindRes) => {
 
         if (bindErr) {
-	    console.log(bindErr)
+            console.log(bindErr)
             LDAP_RESPONSE_OBJ.err = true
             LDAP_RESPONSE_OBJ.authenticatedResult = false
             LDAP_RESPONSE_OBJ.message = bindErr.lde_message
             return res.status(401).json(LDAP_RESPONSE_OBJ)
         }
-
         const token = AuthService.createJWT(uid)
         // TODO write token to mongo
 
@@ -72,7 +73,7 @@ console.log(req.body)
             if (searchErr) {
                 return res.status(401).json()
             }
-            
+
             searchRes.on('error', (err) => {
                 console.error('error: ' + err.message)
             })
@@ -119,3 +120,5 @@ module.exports.authSimple = async (req, res) => {
     }
 
 }
+
+
