@@ -5,7 +5,7 @@ const AuthService = require('../services/AuthService')
 
 module.exports.auth = (req, res) => {
 
-    console.log(req.body)
+    //console.log(req.body)
 
     const dn = 'dc=phsu-mcc,dc=moffitt,dc=org'
     const context = `ou=users,${dn}`
@@ -17,6 +17,12 @@ module.exports.auth = (req, res) => {
         authenticatedResult: false,
         token: null
     }
+    
+    const LDAP_URL = process.env.LDAP_URL;
+    const BIND_DN = 'cn=ldapadm,dc=phsu-mcc,dc=moffitt,dc=org'; //Service Account
+    const BIND_PASSWORD = process.env.LDAP_BIND_PASSWORD;
+    const SEARCH_BASE = 'ou=users,dc=phsu-mcc,dc=moffitt,dc=org';
+    
 
     const uid = req.body.email
     const password = req.body.password
@@ -27,11 +33,11 @@ module.exports.auth = (req, res) => {
         reconnect: true
     })
 
-    console.log('ldap clinet',client)
+   let userDn = null;
 
     client.on('error', err => {
         console.log('connection error')
-        console.log(err)
+        //console.log(err)
         LDAP_RESPONSE_OBJ.err = true
         LDAP_RESPONSE_OBJ.authenticatedResult = false
         LDAP_RESPONSE_OBJ.message = 'Connection error.  Check authentication server is running'
@@ -44,47 +50,87 @@ module.exports.auth = (req, res) => {
 
     const opts = {
         filter: `(uid=${uid})`,
-        scopt: 'sub',
+        scope: 'sub',
         attributes: ['dn', 'uid', 'cn', 'mail']
     }
 
-    client.bind(`uid=${uid},${context}`, password, (bindErr, bindRes) => {
-
+    //client.bind(`cn=${uid},${context}`, password, (bindErr, bindRes) => {
+    client.bind(BIND_DN,BIND_PASSWORD,(bindErr, bindRes) => {
+       
         if (bindErr) {
-            console.log(bindErr)
+            //console.log(bindErr)
+            client.destroy();
             LDAP_RESPONSE_OBJ.err = true
             LDAP_RESPONSE_OBJ.authenticatedResult = false
             LDAP_RESPONSE_OBJ.message = bindErr.lde_message
             return res.status(401).json(LDAP_RESPONSE_OBJ)
         }
-        const token = AuthService.createJWT(uid)
-        // TODO write token to mongo
 
-        LDAP_RESPONSE_OBJ.authenticatedResult = true
-        LDAP_RESPONSE_OBJ.token = token
+        client.search(SEARCH_BASE,opts, (err,res1) => {
+           if (err) {
+             console.log('Search initiation failed: ',err);
+             client.destroy();
+             return;
+           }           
 
-        return res.status(200).json(LDAP_RESPONSE_OBJ)
+           userDn = null;
 
-        /*
-        // code block for searching against LDAP server
-        client.search(`${context}`, opts, (searchErr, searchRes) => {
+           res1.on('searchEntry', (entry) => {
+             console.log('Found Entry: ', JSON.stringify(entry.object, null, 2));
+             userDn = entry.dn.toString();             
+           });
 
-            // TODO add searchErr handler here
-            if (searchErr) {
-                return res.status(401).json()
-            }
+           res1.on('error', (searchErr) => {
+             client.destroy();
+             console.error('Search stream error: ' + searchErr.message);
+           });
+  
+           res1.on('end', (result) => {
+             //console.log('Search complete. Status: ' + result.status);
+            
+             // If no user was matched
+             if (!userDn) {
+               client.destroy();
+               console.log('User not found');
+               LDAP_RESPONSE_OBJ.err = true
+               LDAP_RESPONSE_OBJ.authenticatedResult = false;
+               LDAP_RESPONSE_OBJ.message = "Invalid credentials";
+               return res.status(401).json(LDAP_RESPONSE_OBJ);
+ 	       
+             }             
 
-            searchRes.on('error', (err) => {
-                console.error('error: ' + err.message)
-            })
+             
+             const authClient = ldap.createClient({ url: LDAP_URL });
+             authClient.bind(userDn, password, (authErr) => {
+                // Clean up client to prevent connection leaks
+                client.destroy();
+                authClient.destroy();
 
-            searchRes.on('end', (result) => {
-                console.log('end')
-                console.log(result)
-                console.log('status: ' + result.status)
-            })
-        })
-        */
+                if (authErr) {
+                 // return reject(new Error('Invalid credentials.'));
+                    LDAP_RESPONSE_OBJ.err = true
+                    LDAP_RESPONSE_OBJ.authenticatedResult = false
+                    LDAP_RESPONSE_OBJ.message = authErr.lde_message
+                    return res.status(401).json(LDAP_RESPONSE_OBJ)
+                }
+
+
+		const token = AuthService.createJWT(uid)
+        	// TODO write token to mongo
+
+        	LDAP_RESPONSE_OBJ.authenticatedResult = true
+        	LDAP_RESPONSE_OBJ.token = token
+
+        	return res.status(200).json(LDAP_RESPONSE_OBJ)
+
+             });
+
+
+          });
+
+
+     });
+
 
     })
 }

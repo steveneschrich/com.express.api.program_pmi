@@ -19,21 +19,35 @@ module.exports.import = (req, res) => {
   // TODO write documentation
   // TODO deploy
 
+
   const REDCAP_REQUEST = qs.stringify({
     token: process.env.REDCAP_API_TOKEN,
     content: REDCAP_DATA_CONTENT,
     format: REDCAP_DATA_FORMAT,
     type: REDCAP_DATA_TYPE,
     forceAutoNumber: REDCAP_DATA_FORCE_AUTO_NUMBER,
-    data: JSON.stringify(req.body)
-  })
+    data: JSON.stringify(req.body)    
+  });
+ 
 
-  console.log('REDCAP_REQUEST', REDCAP_REQUEST)
-  axios.post(process.env.REDCAP_API_URL, REDCAP_REQUEST)
+
+  //console.log('REDCAP_REQUEST', REDCAP_REQUEST)
+  
+  axios.post(process.env.REDCAP_API_URL, REDCAP_REQUEST,
+   {
+    //maxContentLength: Infinity,
+    //maxBodyLength: Infinity,
+    headers: { 
+       'Content-Type': 'application/x-www-form-urlencoded',
+       'Accept': 'application/json'
+     }
+   }
+  )
     .then(() => {
       return res.status(201).json({ err: false, message: 'Record successfully imported to RedCap' })
     })
     .catch(err => {
-      return res.status(500).json({ err: true, message: 'ERROR: Record cannot be imported to RedCap' })
+      console.error('Request failed:',err.message);
+      console.log('err',err);return res.status(500).json({ err: true, message: 'ERROR: Record cannot be imported to RedCap' })
     })
 };
